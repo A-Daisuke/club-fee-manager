@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>部費管理</title>
+    <title>部費管理 (月別)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap');
@@ -18,17 +18,33 @@
         input[type="number"] {
             -moz-appearance: textfield;
         }
+        /* disabled 状態の入力欄の見た目を調整 */
+        input:disabled, textarea:disabled {
+            background-color: #f4f5f7; /* 少しグレーに */
+            cursor: not-allowed;
+        }
     </style>
 </head>
 <body class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
     <div id="app" class="p-8">
         <div class="max-w-6xl mx-auto">
-            <h1 class="text-4xl font-bold text-center text-indigo-900 mb-8">部費管理</h1>
+            <h1 class="text-4xl font-bold text-center text-indigo-900 mb-4">部費管理</h1>
+
+            <div class="mb-4 max-w-xs mx-auto">
+                <label for="month-selector" class="block text-sm font-medium text-gray-700 text-center mb-2">表示する月</label>
+                <select id="month-selector" onchange="changeMonth(this.value)" class="w-full px-4 py-3 border-2 border-indigo-300 rounded-lg shadow-sm focus:outline-none focus:border-indigo-500 text-lg font-bold text-indigo-900">
+                    </select>
+            </div>
             
+            <div class="text-center mb-8">
+                <button id="edit-mode-button" onclick="toggleEditMode()" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-6 rounded-lg shadow-md transition transform hover:scale-105 hidden">
+                    過去の記録を編集
+                </button>
+            </div>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8" id="items-container">
                 </div>
 
-            <div class="text-center mb-8">
+            <div class="text-center mb-8" id="add-item-button-container">
                 <button onclick="addItem()" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3 px-8 rounded-lg shadow-lg transition transform hover:scale-105">
                     項目を追加
                 </button>
@@ -38,7 +54,6 @@
                 <h2 class="text-2xl font-bold text-indigo-900 mb-4">合計</h2>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                        <h3 class="text-lg font-semibold text-gray-700 mb-3">項目別</h3>
                         <div id="stats-list"></div>
                     </div>
                     <div class="flex flex-col justify-center items-center bg-indigo-50 rounded-lg p-6">
@@ -49,7 +64,7 @@
                 </div>
             </div>
 
-            <div class="text-center">
+            <div class="text-center" id="reset-names-button-container">
                 <button onclick="resetNames()" class="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-8 rounded-lg shadow-lg transition transform hover:scale-105">
                     名簿をリセット
                 </button>
@@ -60,50 +75,155 @@
     <script>
         // --- グローバル変数 ---
         
-        /**
-         * アプリケーションの全データ（項目）を保持する配列。
-         * @type {Array<Object>}
-         * @property {number} id - 項目の一意なID (Date.now() を使用)
-         * @property {string} label - 項目名 (例: '項目 A')
-         * @property {string} price - 金額 (文字列型で保持)
-         * @property {string} names - 名簿 (改行区切りの文字列)
-         */
+        /** @type {Object<string, Array<Object>>} */
+        let allData = {};
+        
+        /** @type {Array<Object>} */
         let items = [];
+
+        /** @type {string} */
+        let currentMonth = '';
+        
+        /** @type {boolean} 過去の月を編集モードにしているか */
+        let isEditingPast = false;
+
+
+        // --- 月管理・ヘルパー関数 ---
+
+        /**
+         * 現在の「YYYY-MM」形式の文字列を取得
+         */
+        function getCurrentMonthKey() {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = (now.getMonth() + 1).toString().padStart(2, '0');
+            return `${year}-${month}`;
+        }
+
+        /**
+         * 月セレクターのドロップダウンリストを描画する
+         */
+        function renderMonthSelector() {
+            const selector = document.getElementById('month-selector');
+            selector.innerHTML = '';
+            const existingKeys = Object.keys(allData).sort().reverse();
+            const thisMonthKey = getCurrentMonthKey();
+            if (!existingKeys.includes(thisMonthKey)) {
+                existingKeys.unshift(thisMonthKey);
+            }
+            existingKeys.forEach(monthKey => {
+                const option = document.createElement('option');
+                option.value = monthKey;
+                option.textContent = monthKey;
+                if (monthKey === currentMonth) {
+                    option.selected = true;
+                }
+                selector.appendChild(option);
+            });
+        }
+
+        /**
+         * [MODIFIED] 月が変更されたときに呼ばれる関数
+         */
+        function changeMonth(monthKey) {
+            isEditingPast = false; // 月を変更したら必ず編集モードをリセット
+            loadMonthData(monthKey); // グローバルな `items` を入れ替える
+            renderCards();           // 入れ替えた `items` でカードを再描画
+            updateEditButtonVisibility(); // 編集ボタンの状態を更新
+        }
+        
+        //「過去の記録を編集」ボタンの表示/非表示とテキストを切り替える
+        function updateEditButtonVisibility() {
+            const editButton = document.getElementById('edit-mode-button');
+            const isThisMonth = (currentMonth === getCurrentMonthKey());
+
+            if (isThisMonth) {
+                editButton.classList.add('hidden'); // 今月の場合は隠す
+            } else {
+                editButton.classList.remove('hidden'); // 過去の月の場合は表示
+                
+                // 編集モードかどうかに応じてボタンの見た目を変更
+                if (isEditingPast) {
+                    editButton.textContent = '編集を完了';
+                    editButton.classList.remove('bg-yellow-500', 'hover:bg-yellow-600');
+                    editButton.classList.add('bg-green-500', 'hover:bg-green-600');
+                } else {
+                    editButton.textContent = '過去の記録を編集';
+                    editButton.classList.add('bg-yellow-500', 'hover:bg-yellow-600');
+                    editButton.classList.remove('bg-green-500', 'hover:bg-green-600');
+                }
+            }
+        }
+
+        //編集モードを切り替える
+        function toggleEditMode() {
+            isEditingPast = !isEditingPast; // 状態を反転
+            renderCards(); // UIを再描画
+            updateEditButtonVisibility(); // ボタンの見た目を更新
+        }
+
 
         // --- データ管理関数 (localStorage) ---
 
         /**
-         * ブラウザのローカルストレージからデータを読み込む
+         * ブラウザのローカルストレージから「すべての」データを読み込む
          */
-        function loadData() {
-            const saved = localStorage.getItem('club-fee-data');
+        function loadAllData() {
+            const saved = localStorage.getItem('club-fee-data-monthly');
             if (saved) {
-                items = JSON.parse(saved);
-            }
-            
-            // 保存データが空（初回起動など）の場合、デフォルトの1項目を追加
-            if (items.length === 0) {
-                items = [
-                    { id: Date.now(), label: '項目 1', price: '500', names: '' },
-                    { id: Date.now()-1, label: '項目 2', price: '800', names: '' },
-                    { id: Date.now()-2, label: '項目 3', price: '1000', names: '' }
-                ];
+                allData = JSON.parse(saved);
             }
         }
 
         /**
-         * 現在の `items` 配列の状態をローカルストレージに保存する
+         * `allData` の状態をローカルストレージに保存する
+         */
+        function saveAllData() {
+            localStorage.setItem('club-fee-data-monthly', JSON.stringify(allData));
+        }
+
+        /**
+         * 指定された月のデータをロードし、`items` 変数にセットする
+         */
+        function loadMonthData(monthKey) {
+            currentMonth = monthKey;
+
+            if (allData[monthKey]) {
+                items = allData[monthKey];
+            } else {
+                const keys = Object.keys(allData).sort().reverse();
+                const lastMonthKey = keys[0];
+
+                if (lastMonthKey) {
+                    // --- 先月の項目を引き継ぐ処理 ---
+                    let lastMonthItems = JSON.parse(JSON.stringify(allData[lastMonthKey]));
+                    let newItems = lastMonthItems.map(item => ({ ...item, names: '' }));
+                    allData[monthKey] = newItems;
+                } else {
+                    // --- 本当の初回起動（先月データもない）の場合 ---
+                    allData[monthKey] = [
+                        { id: Date.now(), label: '項目 1', price: '500', names: '' },
+                        { id: Date.now()-1, label: '項目 2', price: '800', names: '' },
+                        { id: Date.now()-2, label: '項目 3', price: '1000', names: '' }
+                    ];
+                }
+                
+                items = allData[monthKey];
+            }
+        }
+
+        /**
+         * 現在の `items` の状態を `allData` に書き戻し、全体を保存する
          */
         function saveData() {
-            localStorage.setItem('club-fee-data', JSON.stringify(items));
+            allData[currentMonth] = items;
+            saveAllData();
         }
 
         // --- ユーティリティ関数 ---
 
         /**
          * 改行区切りの名前文字列を、空行を除いた名前の配列に変換する
-         * @param {string} names - 改行区切りの名前文字列
-         * @returns {Array<string>} 名前の配列
          */
         function getNameList(names) {
             return names.split('\n').filter(name => name.trim() !== '');
@@ -113,37 +233,29 @@
 
         /**
          * [...] メニューから項目名を変更する
-         * @param {number} itemId - 対象の項目ID
          */
         function renameItem(itemId) {
             const item = items.find(i => i.id === itemId);
             if (!item) return;
-
-            toggleMenu(itemId, true); // メニューを強制的に閉じる
-
-            // prompt で新しい名前の入力を受け付ける
+            toggleMenu(itemId, true);
             const newLabel = prompt('新しい項目名を入力してください:', item.label);
-            
-            // 入力があり、空文字列でなければ更新
             if (newLabel && newLabel.trim() !== '') {
                 item.label = newLabel.trim();
                 saveData();
-                renderCards(); // 項目名（カードのタイトル）が変わったので再描画
+                renderCards();
             }
         }
 
         /**
          * [...] メニューから項目自体を削除する
-         * @param {number} itemId - 対象の項目ID
          */
         function deleteItem(itemId) {
-            toggleMenu(itemId, true); // メニューを強制的に閉じる
-
-            // 誤操作防止の確認ダイアログ
+            toggleMenu(itemId, true);
             if (confirm('この項目を削除してもよろしいですか？（名簿も削除されます）')) {
-                items = items.filter(item => item.id !== itemId); // IDが一致しないものだけを残す
+                items = items.filter(item => item.id !== itemId);
+                allData[currentMonth] = items;
                 saveData();
-                renderCards(); // 項目が減ったので再描画
+                renderCards();
             }
         }
 
@@ -151,30 +263,28 @@
          * 「項目を追加」ボタンの処理
          */
         function addItem() {
-            const newId = Date.now(); // ユニークなIDとして現在時刻のタイムスタンプを使用
+            const newId = Date.now();
             const newItem = {
                 id: newId,
-                label: `項目 ${items.length + 1}`, // 仮の項目名
+                label: `項目 ${items.length + 1}`,
                 price: '',
                 names: ''
             };
-            items.push(newItem); // 配列の末尾に追加
+            items.push(newItem);
             saveData();
-            renderCards(); // 項目が増えたので再描画
+            renderCards();
         }
         
         /**
          * [...] メニューの表示・非表示を切り替える
-         * @param {number} itemId - 対象の項目ID
-         * @param {boolean} [forceClose=false] - trueの場合、メニューを強制的に閉じる
          */
         function toggleMenu(itemId, forceClose = false) {
             const menu = document.getElementById(`menu-${itemId}`);
             if (menu) {
                 if (forceClose) {
-                    menu.classList.add('hidden'); // 強制的に非表示
+                    menu.classList.add('hidden');
                 } else {
-                    menu.classList.toggle('hidden'); // 表示・非表示を切り替え
+                    menu.classList.toggle('hidden');
                 }
             }
         }
@@ -184,29 +294,25 @@
 
         /**
          * 金額入力フィールドのリアルタイム更新処理
-         * @param {number} itemId - 対象の項目ID
-         * @param {string} value - 入力された値
          */
         function updatePrice(itemId, value) {
             const item = items.find(i => i.id === itemId);
             if (item) {
                 item.price = value;
                 saveData();
-                updateStats(); // 統計エリアだけを更新
+                updateStats();
             }
         }
 
         /**
          * 名前入力テキストエリアのリアルタイム更新処理
-         * @param {number} itemId - 対象の項目ID
-         * @param {string} value - 入力された値
          */
         function updateNames(itemId, value) {
             const item = items.find(i => i.id === itemId);
             if (item) {
                 item.names = value;
                 saveData();
-                updateStats(); // 統計エリアだけを更新
+                updateStats();
             }
         }
 
@@ -217,10 +323,10 @@
          */
         function resetNames() {
             if (confirm('名簿と合計金額をリセットしますか？（項目名と金額設定は保持されます）')) {
-                // ...item (スプレッド構文) で id, label, price はそのままに、namesだけ空にする
                 items = items.map(item => ({ ...item, names: '' }));
+                allData[currentMonth] = items;
                 saveData();
-                renderCards(); // カードを再描画
+                renderCards();
             }
         }
 
@@ -228,30 +334,30 @@
 
         /**
          * `items` 配列から現在の統計（人数、小計、合計）を計算する
-         * @returns {Object} { stats: Array, totalAmount: number }
          */
         function calculateStats() {
             let totalAmount = 0;
-            // items 配列を元に、各項目の計算結果を新しい配列 (stats) にマッピング
-            const stats = items.map(item => {
-                const price = parseFloat(item.price) || 0; // 文字列を数値に変換（空なら0）
-                const count = getNameList(item.names).length; // 名簿の行数（人数）
-                const subtotal = price * count; // 小計
-                totalAmount += subtotal; // 総合計に加算
+            // items が null や undefined の場合、空配列として扱う
+            const currentItems = items || []; 
+            const stats = currentItems.map(item => {
+                const price = parseFloat(item.price) || 0;
+                const count = getNameList(item.names).length;
+                const subtotal = price * count;
+                totalAmount += subtotal;
                 return { price, count, subtotal };
             });
             return { stats, totalAmount };
         }
 
         /**
-         * 統計エリア（合計欄）のHTMLだけを計算結果に基づいて更新する
-         * (入力のたびに呼ばれるため、処理を軽くしている)
+         * [MODIFIED] 統計エリア（合計欄）のHTMLだけを計算結果に基づいて更新する
          */
         function updateStats() {
             const { stats, totalAmount } = calculateStats();
+            const currentItems = items || []; // items が null の場合を考慮
 
             // 1. 各カードのフッターにある小計・人数を更新
-            items.forEach((item, index) => {
+            currentItems.forEach((item, index) => {
                 const countEl = document.getElementById(`count-${item.id}`);
                 const subtotalEl = document.getElementById(`subtotal-${item.id}`);
                 if (countEl) {
@@ -264,7 +370,7 @@
 
             // 2. 「合計」エリアの「項目別集計」を更新
             const statsList = document.getElementById('stats-list');
-            statsList.innerHTML = items.map((item, index) => {
+            statsList.innerHTML = currentItems.map((item, index) => {
                 return `
                     <div class="flex justify-between items-center py-2 border-b border-gray-200">
                         <span class="text-gray-700">${item.label || '未設定'} (${item.price || 0}円):</span>
@@ -279,90 +385,106 @@
 
 
         /**
-         * `items` 配列に基づいて、項目カード全体のHTMLを生成し、描画する
-         * (この処理は重いため、入力中は実行せず、項目追加/削除などの構造変更時にのみ実行する)
+         * [MODIFIED] `items` 配列に基づいて、項目カード全体のHTMLを生成し、描画する
          */
         function renderCards() {
             const itemsContainer = document.getElementById('items-container');
             
-            // `items` 配列の要素数分、HTML文字列を生成する
-            itemsContainer.innerHTML = items.map((item, index) => {
-                const nameList = getNameList(item.names);
-                
-                // カードのHTMLテンプレート
-                return `
-                    <div class="bg-white rounded-lg shadow-lg p-6 relative">
+            // --- 編集可能かどうかのフラグを決定 ---
+            // 1. 今月 (currentMonth) は常に編集可能
+            // 2. 過去の月でも、isEditingPast が true なら編集可能
+            const isEditable = (currentMonth === getCurrentMonthKey() || isEditingPast);
+
+            if (!items || items.length === 0) {
+                itemsContainer.innerHTML = `<div class="col-span-1 md:col-span-3 text-center text-gray-500 py-8">データがありません。「項目を追加」ボタンから最初の項目を作成してください。</div>`;
+            } else {
+                itemsContainer.innerHTML = items.map((item, index) => {
+                    const nameList = getNameList(item.names);
                     
-                        <div class="absolute top-2 right-2">
-                            <button onclick="toggleMenu(${item.id})" class="text-gray-500 hover:text-indigo-700 p-2 rounded-full focus:outline-none">
-                                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                                    <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"></path>
-                                </svg>
-                            </button>
-                            
-                            <div id="menu-${item.id}" class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-10 hidden">
-                                <a href="#" onclick="event.preventDefault(); renameItem(${item.id})" class="block px-4 py-2 text-sm text-gray-700 hover:bg-indigo-50">
-                                    項目名を変更
-                                </a>
-                                <a href="#" onclick="event.preventDefault(); deleteItem(${item.id})" class="block px-4 py-2 text-sm text-red-600 hover:bg-red-50">
-                                    項目を削除
-                                </a>
+                    return `
+                        <div class="bg-white rounded-lg shadow-lg p-6 relative">
+                        
+                            <div class="absolute top-2 right-2 ${!isEditable ? 'hidden' : ''}">
+                                <button onclick="toggleMenu(${item.id})" class="text-gray-500 hover:text-indigo-700 p-2 rounded-full focus:outline-none">
+                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"></path>
+                                    </svg>
+                                </button>
+                                
+                                <div id="menu-${item.id}" class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-10 hidden">
+                                    <a href="#" onclick="event.preventDefault(); renameItem(${item.id})" class="block px-4 py-2 text-sm text-gray-700 hover:bg-indigo-50">
+                                        項目名を変更
+                                    </a>
+                                    <a href="#" onclick="event.preventDefault(); deleteItem(${item.id})" class="block px-4 py-2 text-sm text-red-600 hover:bg-red-50">
+                                        項目を削除
+                                    </a>
+                                </div>
+                            </div>
+
+                            <div class="mb-4">
+                                <h2 class="font-bold text-xl text-indigo-900 mb-3 pr-8">
+                                    ${item.label}
+                                </h2>
+                                
+                                <label class="block text-sm font-semibold text-gray-700 mb-2">
+                                    金額
+                                </label>
+                                <div class="flex items-center gap-2">
+                                    <input
+                                        type="number"
+                                        value="${item.price}"
+                                        oninput="updatePrice(${item.id}, this.value)"
+                                        placeholder="金額"
+                                        class="w-full px-4 py-2 border-2 border-indigo-200 rounded-lg focus:outline-none focus:border-indigo-500"
+                                        ${!isEditable ? 'disabled' : ''}
+                                    />
+                                    <span class="text-gray-700 font-medium">円</span>
+                                </div>
+                            </div>
+
+                            <div class="mb-4">
+                                <label class="block text-sm font-semibold text-gray-700 mb-2">
+                                    名前（改行で区切る）
+                                </label>
+                                <textarea
+                                    id="names-${item.id}"
+                                    oninput="updateNames(${item.id}, this.value)"
+                                    placeholder="山田太郎&#10;佐藤花子&#10;田中次郎"
+                                    rows="8"
+                                    class="w-full px-4 py-2 border-2 border-indigo-200 rounded-lg focus:outline-none focus:border-indigo-500 resize-none"
+                                    ${!isEditable ? 'disabled' : ''}
+                                >${item.names}</textarea>
+                            </div>
+
+                            <div class="mt-4 pt-4 border-t-2 border-indigo-100">
+                                <p class="text-sm text-gray-600">人数: <span class="font-bold text-indigo-700" id="count-${item.id}">0人</span></p>
+                                <p class="text-sm text-gray-600">小計: <span class="font-bold text-indigo-700" id="subtotal-${item.id}">0円</span></p>
                             </div>
                         </div>
-
-                        <div class="mb-4">
-                            <h2 class="font-bold text-xl text-indigo-900 mb-3 pr-8">
-                                ${item.label}
-                            </h2>
-                            
-                            <label class="block text-sm font-semibold text-gray-700 mb-2">
-                                金額
-                            </label>
-                            <div class="flex items-center gap-2">
-                                <input
-                                    type="number"
-                                    value="${item.price}"
-                                    oninput="updatePrice(${item.id}, this.value)"
-                                    placeholder="金額"
-                                    class="w-full px-4 py-2 border-2 border-indigo-200 rounded-lg focus:outline-none focus:border-indigo-500"
-                                />
-                                <span class="text-gray-700 font-medium">円</span>
-                            </div>
-                        </div>
-
-                        <div class="mb-4">
-                            <label class="block text-sm font-semibold text-gray-700 mb-2">
-                                名前（改行で区切る）
-                            </label>
-                            <textarea
-                                id="names-${item.id}"
-                                oninput="updateNames(${item.id}, this.value)"
-                                placeholder="山田太郎&#10;佐藤花子&#10;田中次郎"
-                                rows="8"
-                                class="w-full px-4 py-2 border-2 border-indigo-200 rounded-lg focus:outline-none focus:border-indigo-500 resize-none"
-                            >${item.names}</textarea>
-                        </div>
-
-                        <div class="mt-4 pt-4 border-t-2 border-indigo-100">
-                            <p class="text-sm text-gray-600">人数: <span class="font-bold text-indigo-700" id="count-${item.id}">0人</span></p>
-                            <p class="text-sm text-gray-600">小計: <span class="font-bold text-indigo-700" id="subtotal-${item.id}">0円</span></p>
-                        </div>
-                    </div>
-                `;
-            }).join('');
+                    `;
+                }).join('');
+            }
 
             // カードのHTMLを挿入した後、統計エリアを最新の状態に更新する
             updateStats();
+            
+            // --- グローバルなボタン（項目追加・リセット）の表示/非表示を切り替え ---
+            document.getElementById('add-item-button-container').classList.toggle('hidden', !isEditable);
+            document.getElementById('reset-names-button-container').classList.toggle('hidden', !isEditable);
         }
 
         // --- アプリケーションの初期化・実行 ---
 
         /**
-         * アプリケーションの初期化（起動処理）
+         * [MODIFIED] アプリケーションの初期化（起動処理）
          */
         function initialize() {
-            loadData();    // 1. ローカルストレージからデータを読み込む
-            renderCards(); // 2. 読み込んだデータで画面を描画する
+            loadAllData();
+            currentMonth = getCurrentMonthKey();
+            renderMonthSelector();
+            loadMonthData(currentMonth);
+            renderCards();
+            updateEditButtonVisibility(); // 編集ボタンの状態を初期化
         }
         
         /**
@@ -370,13 +492,10 @@
          * メニュー以外の場所をクリックしたときに、開いているメニューをすべて閉じる
          */
         window.onclick = function(event) {
-            // event.target (クリックされた要素) が [...] ボタン (svg や path を含む) でないかチェック
             if (!event.target.closest('button') || !event.target.closest('button').onclick.toString().includes('toggleMenu')) {
-                
-                // 開いている可能性のあるすべてのメニュー (hiddenクラスを持たない) を取得
                 const openMenus = document.querySelectorAll('div[id^="menu-"]:not(.hidden)');
                 openMenus.forEach(menu => {
-                    menu.classList.add('hidden'); // hiddenクラスを追加して閉じる
+                    menu.classList.add('hidden');
                 });
             }
         }
