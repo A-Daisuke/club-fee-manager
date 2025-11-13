@@ -1,0 +1,190 @@
+import React, { useState, useEffect } from 'react';
+import { X } from 'lucide-react';
+
+const ClubFeeManager = () => {
+  const [items, setItems] = useState([
+    { id: 1, price: '', names: '' },
+    { id: 2, price: '', names: '' },
+    { id: 3, price: '', names: '' }
+  ]);
+
+  // Load data from storage on mount
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const result = await window.storage.get('club-fee-data');
+        if (result && result.value) {
+          setItems(JSON.parse(result.value));
+        }
+      } catch (error) {
+        console.log('No saved data found');
+      }
+    };
+    loadData();
+  }, []);
+
+  // Save data to storage whenever items change
+  useEffect(() => {
+    const saveData = async () => {
+      try {
+        await window.storage.set('club-fee-data', JSON.stringify(items));
+      } catch (error) {
+        console.error('Failed to save data:', error);
+      }
+    };
+    saveData();
+  }, [items]);
+
+  const handlePriceChange = (id, value) => {
+    setItems(items.map(item => 
+      item.id === id ? { ...item, price: value } : item
+    ));
+  };
+
+  const handleNamesChange = (id, value) => {
+    setItems(items.map(item => 
+      item.id === id ? { ...item, names: value } : item
+    ));
+  };
+
+  const getNameList = (names) => {
+    return names.split('\n').filter(name => name.trim() !== '');
+  };
+
+  const removeName = (itemId, nameIndex) => {
+    setItems(items.map(item => {
+      if (item.id === itemId) {
+        const nameList = getNameList(item.names);
+        nameList.splice(nameIndex, 1);
+        return { ...item, names: nameList.join('\n') };
+      }
+      return item;
+    }));
+  };
+
+  const resetNames = async () => {
+    const confirmed = window.confirm('名簿と合計金額をリセットしますか？（金額設定は保持されます）');
+    if (confirmed) {
+      const resetItems = items.map(item => ({ ...item, names: '' }));
+      setItems(resetItems);
+      try {
+        await window.storage.set('club-fee-data', JSON.stringify(resetItems));
+      } catch (error) {
+        console.error('Failed to save data:', error);
+      }
+    }
+  };
+
+  const calculateStats = () => {
+    let totalAmount = 0;
+    const stats = items.map(item => {
+      const price = parseFloat(item.price) || 0;
+      const count = getNameList(item.names).length;
+      const subtotal = price * count;
+      totalAmount += subtotal;
+      return { price, count, subtotal };
+    });
+    return { stats, totalAmount };
+  };
+
+  const { stats, totalAmount } = calculateStats();
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-8">
+      <div className="max-w-6xl mx-auto">
+        <h1 className="text-4xl font-bold text-center text-indigo-900 mb-8">部費徴収管理</h1>
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          {items.map((item, index) => {
+            const nameList = getNameList(item.names);
+            return (
+              <div key={item.id} className="bg-white rounded-lg shadow-lg p-6">
+                <div className="mb-4">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    項目 {String.fromCharCode(65 + index)}
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      value={item.price}
+                      onChange={(e) => handlePriceChange(item.id, e.target.value)}
+                      placeholder="金額"
+                      className="w-full px-4 py-2 border-2 border-indigo-200 rounded-lg focus:outline-none focus:border-indigo-500"
+                    />
+                    <span className="text-gray-700 font-medium">円</span>
+                  </div>
+                </div>
+
+                <div className="mb-4">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    名前（改行で区切る）
+                  </label>
+                  <textarea
+                    value={item.names}
+                    onChange={(e) => handleNamesChange(item.id, e.target.value)}
+                    placeholder="山田太郎&#10;佐藤花子&#10;田中次郎"
+                    rows="8"
+                    className="w-full px-4 py-2 border-2 border-indigo-200 rounded-lg focus:outline-none focus:border-indigo-500 resize-none"
+                  />
+                </div>
+
+                {nameList.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-sm font-semibold text-gray-700">登録済み:</p>
+                    {nameList.map((name, idx) => (
+                      <div key={idx} className="flex items-center justify-between bg-indigo-50 px-3 py-2 rounded">
+                        <span className="text-sm">{name}</span>
+                        <button
+                          onClick={() => removeName(item.id, idx)}
+                          className="text-red-500 hover:text-red-700 transition"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="mt-4 pt-4 border-t-2 border-indigo-100">
+                  <p className="text-sm text-gray-600">人数: <span className="font-bold text-indigo-700">{stats[index].count}人</span></p>
+                  <p className="text-sm text-gray-600">小計: <span className="font-bold text-indigo-700">{stats[index].subtotal.toLocaleString()}円</span></p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="bg-white rounded-lg shadow-lg p-8 mb-6">
+          <h2 className="text-2xl font-bold text-indigo-900 mb-4">合計</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-700 mb-3">項目別集計</h3>
+              {items.map((item, index) => (
+                <div key={item.id} className="flex justify-between items-center py-2 border-b border-gray-200">
+                  <span className="text-gray-700">項目 {String.fromCharCode(65 + index)} ({item.price || 0}円):</span>
+                  <span className="font-bold text-indigo-700">{stats[index].count}人</span>
+                </div>
+              ))}
+            </div>
+            <div className="flex flex-col justify-center items-center bg-indigo-50 rounded-lg p-6">
+              <p className="text-gray-600 mb-2">総合計金額</p>
+              <p className="text-5xl font-bold text-indigo-900">{totalAmount.toLocaleString()}</p>
+              <p className="text-gray-600 mt-1">円</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="text-center">
+          <button
+            onClick={resetNames}
+            className="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-8 rounded-lg shadow-lg transition transform hover:scale-105"
+          >
+            名簿をリセット
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default ClubFeeManager;
