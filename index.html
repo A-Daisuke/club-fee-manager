@@ -353,6 +353,7 @@
         }
 
         // --- リセット ---
+        /*
         function resetNames() {
             if (confirm('名簿と合計金額をリセットしますか？（項目名と金額設定は保持されます）\n\n※全員のデータがリセットされます')) {
                 items = items.map(item => ({ ...item, names: '' }));
@@ -361,6 +362,7 @@
                 renderCards();
             }
         }
+        */
 
         // --- 計算・描画 ---
         function calculateStats() {
@@ -481,7 +483,8 @@
             updateStats();
             
             document.getElementById('add-item-button-container').classList.toggle('hidden', !isEditable);
-            document.getElementById('reset-names-button-container').classList.toggle('hidden', !isEditable);
+            //リセットボタンの処理
+            //document.getElementById('reset-names-button-container').classList.toggle('hidden', !isEditable);
         }
 
         // --- 初期化 ---
