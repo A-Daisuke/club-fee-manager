@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>部費管理 (月別)</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+    
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap');
         body {
@@ -18,9 +23,8 @@
         input[type="number"] {
             -moz-appearance: textfield;
         }
-        /* disabled 状態の入力欄の見た目を調整 */
         input:disabled, textarea:disabled {
-            background-color: #f4f5f7; /* 少しグレーに */
+            background-color: #f4f5f7;
             cursor: not-allowed;
         }
     </style>
@@ -28,12 +32,16 @@
 <body class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
     <div id="app" class="p-8">
         <div class="max-w-6xl mx-auto">
-            <h1 class="text-4xl font-bold text-center text-indigo-900 mb-4">部費管理</h1>
+            <div class="flex items-center justify-center gap-3 mb-2">
+                <h1 class="text-4xl font-bold text-center text-indigo-900">部費管理</h1>
+                <div id="sync-indicator" class="w-3 h-3 rounded-full bg-gray-400" title="接続中..."></div>
+            </div>
+            <p class="text-center text-sm text-gray-600 mb-4">※このサイトのデータは全員で共有されます</p>
 
             <div class="mb-4 max-w-xs mx-auto">
                 <label for="month-selector" class="block text-sm font-medium text-gray-700 text-center mb-2">表示する月</label>
                 <select id="month-selector" onchange="changeMonth(this.value)" class="w-full px-4 py-3 border-2 border-indigo-300 rounded-lg shadow-sm focus:outline-none focus:border-indigo-500 text-lg font-bold text-indigo-900">
-                    </select>
+                </select>
             </div>
             
             <div class="text-center mb-8">
@@ -41,8 +49,8 @@
                     過去の記録を編集
                 </button>
             </div>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8" id="items-container">
-                </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8" id="items-container"></div>
 
             <div class="text-center mb-8" id="add-item-button-container">
                 <button onclick="addItem()" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3 px-8 rounded-lg shadow-lg transition transform hover:scale-105">
@@ -73,26 +81,112 @@
     </div>
 
     <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyDyTS3N8CBac4E9iMOVL6YBOWNK8M02p6U",
+            authDomain: "club-fee-manager.firebaseapp.com",
+            databaseURL: "https://club-fee-manager-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "club-fee-manager",
+            storageBucket: "club-fee-manager.firebasestorage.app",
+            messagingSenderId: "122953605460",
+            appId: "1:122953605460:web:0f7c8153367720276da8c1"
+        };
+
+        // Initialize Firebase
+        let database;
+        let dataRef;
+        let isInitialized = false;
+
+        try {
+            firebase.initializeApp(firebaseConfig);
+            database = firebase.database();
+            dataRef = database.ref('clubFeeDataMonthly');
+            isInitialized = true;
+        } catch (error) {
+            console.error('Firebase initialization failed:', error);
+            alert('Firebase設定が必要です。設定方法はコメントを参照してください。');
+        }
+
         // --- グローバル変数 ---
-        
-        /** @type {Object<string, Array<Object>>} */
         let allData = {};
-        
-        /** @type {Array<Object>} */
         let items = [];
-
-        /** @type {string} */
         let currentMonth = '';
-        
-        /** @type {boolean} 過去の月を編集モードにしているか */
         let isEditingPast = false;
+        let isUpdating = false;
+        let saveTimeout = null;
 
+        // --- 同期インジケーター ---
+        function showSyncIndicator(status) {
+            const indicator = document.getElementById('sync-indicator');
+            if (status === 'syncing') {
+                indicator.className = 'w-3 h-3 rounded-full bg-yellow-500 animate-pulse';
+                indicator.title = '同期中...';
+            } else if (status === 'connected') {
+                indicator.className = 'w-3 h-3 rounded-full bg-green-500';
+                indicator.title = '同期完了';
+            } else if (status === 'error') {
+                indicator.className = 'w-3 h-3 rounded-full bg-red-500';
+                indicator.title = '接続エラー';
+            } else {
+                indicator.className = 'w-3 h-3 rounded-full bg-gray-400';
+                indicator.title = '接続中...';
+            }
+        }
 
-        // --- 月管理・ヘルパー関数 ---
+        // --- Firebase関連 ---
+        function setupFirebaseListener() {
+            if (!isInitialized) return;
 
-        /**
-         * 現在の「YYYY-MM」形式の文字列を取得
-         */
+            dataRef.on('value', (snapshot) => {
+                if (isUpdating) return;
+                
+                const data = snapshot.val();
+                if (data) {
+                    allData = data;
+                    loadMonthData(currentMonth);
+                    renderCards();
+                }
+                showSyncIndicator('connected');
+            }, (error) => {
+                console.error('Firebase read error:', error);
+                showSyncIndicator('error');
+            });
+        }
+
+        async function saveAllData() {
+            if (!isInitialized) {
+                localStorage.setItem('club-fee-data-monthly', JSON.stringify(allData));
+                return;
+            }
+
+            try {
+                showSyncIndicator('syncing');
+                isUpdating = true;
+                
+                await dataRef.set(allData);
+                localStorage.setItem('club-fee-data-monthly', JSON.stringify(allData));
+                
+                setTimeout(() => {
+                    isUpdating = false;
+                    showSyncIndicator('connected');
+                }, 300);
+            } catch (error) {
+                console.error('Failed to save data:', error);
+                showSyncIndicator('error');
+                isUpdating = false;
+                localStorage.setItem('club-fee-data-monthly', JSON.stringify(allData));
+            }
+        }
+
+        function saveData() {
+            allData[currentMonth] = items;
+            
+            clearTimeout(saveTimeout);
+            saveTimeout = setTimeout(() => {
+                saveAllData();
+            }, 1000);
+        }
+
+        // --- 月管理関数 ---
         function getCurrentMonthKey() {
             const now = new Date();
             const year = now.getFullYear();
@@ -100,9 +194,6 @@
             return `${year}-${month}`;
         }
 
-        /**
-         * 月セレクターのドロップダウンリストを描画する
-         */
         function renderMonthSelector() {
             const selector = document.getElementById('month-selector');
             selector.innerHTML = '';
@@ -122,27 +213,22 @@
             });
         }
 
-        /**
-         * [MODIFIED] 月が変更されたときに呼ばれる関数
-         */
         function changeMonth(monthKey) {
-            isEditingPast = false; // 月を変更したら必ず編集モードをリセット
-            loadMonthData(monthKey); // グローバルな `items` を入れ替える
-            renderCards();           // 入れ替えた `items` でカードを再描画
-            updateEditButtonVisibility(); // 編集ボタンの状態を更新
+            isEditingPast = false;
+            loadMonthData(monthKey);
+            renderCards();
+            updateEditButtonVisibility();
         }
-        
-        //「過去の記録を編集」ボタンの表示/非表示とテキストを切り替える
+
         function updateEditButtonVisibility() {
             const editButton = document.getElementById('edit-mode-button');
             const isThisMonth = (currentMonth === getCurrentMonthKey());
 
             if (isThisMonth) {
-                editButton.classList.add('hidden'); // 今月の場合は隠す
+                editButton.classList.add('hidden');
             } else {
-                editButton.classList.remove('hidden'); // 過去の月の場合は表示
+                editButton.classList.remove('hidden');
                 
-                // 編集モードかどうかに応じてボタンの見た目を変更
                 if (isEditingPast) {
                     editButton.textContent = '編集を完了';
                     editButton.classList.remove('bg-yellow-500', 'hover:bg-yellow-600');
@@ -155,19 +241,13 @@
             }
         }
 
-        //編集モードを切り替える
         function toggleEditMode() {
-            isEditingPast = !isEditingPast; // 状態を反転
-            renderCards(); // UIを再描画
-            updateEditButtonVisibility(); // ボタンの見た目を更新
+            isEditingPast = !isEditingPast;
+            renderCards();
+            updateEditButtonVisibility();
         }
 
-
-        // --- データ管理関数 (localStorage) ---
-
-        /**
-         * ブラウザのローカルストレージから「すべての」データを読み込む
-         */
+        // --- データ管理 ---
         function loadAllData() {
             const saved = localStorage.getItem('club-fee-data-monthly');
             if (saved) {
@@ -175,16 +255,6 @@
             }
         }
 
-        /**
-         * `allData` の状態をローカルストレージに保存する
-         */
-        function saveAllData() {
-            localStorage.setItem('club-fee-data-monthly', JSON.stringify(allData));
-        }
-
-        /**
-         * 指定された月のデータをロードし、`items` 変数にセットする
-         */
         function loadMonthData(monthKey) {
             currentMonth = monthKey;
 
@@ -195,12 +265,10 @@
                 const lastMonthKey = keys[0];
 
                 if (lastMonthKey) {
-                    // --- 先月の項目を引き継ぐ処理 ---
                     let lastMonthItems = JSON.parse(JSON.stringify(allData[lastMonthKey]));
                     let newItems = lastMonthItems.map(item => ({ ...item, names: '' }));
                     allData[monthKey] = newItems;
                 } else {
-                    // --- 本当の初回起動（先月データもない）の場合 ---
                     allData[monthKey] = [
                         { id: Date.now(), label: '項目 1', price: '500', names: '' },
                         { id: Date.now()-1, label: '項目 2', price: '800', names: '' },
@@ -212,28 +280,12 @@
             }
         }
 
-        /**
-         * 現在の `items` の状態を `allData` に書き戻し、全体を保存する
-         */
-        function saveData() {
-            allData[currentMonth] = items;
-            saveAllData();
-        }
-
-        // --- ユーティリティ関数 ---
-
-        /**
-         * 改行区切りの名前文字列を、空行を除いた名前の配列に変換する
-         */
+        // --- ユーティリティ ---
         function getNameList(names) {
             return names.split('\n').filter(name => name.trim() !== '');
         }
 
-        // --- カード操作関数 (項目名の変更・削除) ---
-
-        /**
-         * [...] メニューから項目名を変更する
-         */
+        // --- カード操作 ---
         function renameItem(itemId) {
             const item = items.find(i => i.id === itemId);
             if (!item) return;
@@ -246,9 +298,6 @@
             }
         }
 
-        /**
-         * [...] メニューから項目自体を削除する
-         */
         function deleteItem(itemId) {
             toggleMenu(itemId, true);
             if (confirm('この項目を削除してもよろしいですか？（名簿も削除されます）')) {
@@ -259,9 +308,6 @@
             }
         }
 
-        /**
-         * 「項目を追加」ボタンの処理
-         */
         function addItem() {
             const newId = Date.now();
             const newItem = {
@@ -274,10 +320,7 @@
             saveData();
             renderCards();
         }
-        
-        /**
-         * [...] メニューの表示・非表示を切り替える
-         */
+
         function toggleMenu(itemId, forceClose = false) {
             const menu = document.getElementById(`menu-${itemId}`);
             if (menu) {
@@ -289,12 +332,7 @@
             }
         }
 
-
-        // --- リアルタイム更新関数 (oninput) ---
-
-        /**
-         * 金額入力フィールドのリアルタイム更新処理
-         */
+        // --- リアルタイム更新 ---
         function updatePrice(itemId, value) {
             const item = items.find(i => i.id === itemId);
             if (item) {
@@ -304,9 +342,6 @@
             }
         }
 
-        /**
-         * 名前入力テキストエリアのリアルタイム更新処理
-         */
         function updateNames(itemId, value) {
             const item = items.find(i => i.id === itemId);
             if (item) {
@@ -316,13 +351,9 @@
             }
         }
 
-        // --- リセット関数 ---
-
-        /**
-         * 「名簿をリセット」ボタンの処理
-         */
+        // --- リセット ---
         function resetNames() {
-            if (confirm('名簿と合計金額をリセットしますか？（項目名と金額設定は保持されます）')) {
+            if (confirm('名簿と合計金額をリセットしますか？（項目名と金額設定は保持されます）\n\n※全員のデータがリセットされます')) {
                 items = items.map(item => ({ ...item, names: '' }));
                 allData[currentMonth] = items;
                 saveData();
@@ -330,15 +361,10 @@
             }
         }
 
-        // --- 計算・描画関数 ---
-
-        /**
-         * `items` 配列から現在の統計（人数、小計、合計）を計算する
-         */
+        // --- 計算・描画 ---
         function calculateStats() {
             let totalAmount = 0;
-            // items が null や undefined の場合、空配列として扱う
-            const currentItems = items || []; 
+            const currentItems = items || [];
             const stats = currentItems.map(item => {
                 const price = parseFloat(item.price) || 0;
                 const count = getNameList(item.names).length;
@@ -349,14 +375,10 @@
             return { stats, totalAmount };
         }
 
-        /**
-         * [MODIFIED] 統計エリア（合計欄）のHTMLだけを計算結果に基づいて更新する
-         */
         function updateStats() {
             const { stats, totalAmount } = calculateStats();
-            const currentItems = items || []; // items が null の場合を考慮
+            const currentItems = items || [];
 
-            // 1. 各カードのフッターにある小計・人数を更新
             currentItems.forEach((item, index) => {
                 const countEl = document.getElementById(`count-${item.id}`);
                 const subtotalEl = document.getElementById(`subtotal-${item.id}`);
@@ -368,7 +390,6 @@
                 }
             });
 
-            // 2. 「合計」エリアの「項目別集計」を更新
             const statsList = document.getElementById('stats-list');
             statsList.innerHTML = currentItems.map((item, index) => {
                 return `
@@ -379,20 +400,11 @@
                 `;
             }).join('');
 
-            // 3. 「総合計金額」を更新
             document.getElementById('total-amount').textContent = totalAmount.toLocaleString();
         }
 
-
-        /**
-         * [MODIFIED] `items` 配列に基づいて、項目カード全体のHTMLを生成し、描画する
-         */
         function renderCards() {
             const itemsContainer = document.getElementById('items-container');
-            
-            // --- 編集可能かどうかのフラグを決定 ---
-            // 1. 今月 (currentMonth) は常に編集可能
-            // 2. 過去の月でも、isEditingPast が true なら編集可能
             const isEditable = (currentMonth === getCurrentMonthKey() || isEditingPast);
 
             if (!items || items.length === 0) {
@@ -465,32 +477,26 @@
                 }).join('');
             }
 
-            // カードのHTMLを挿入した後、統計エリアを最新の状態に更新する
             updateStats();
             
-            // --- グローバルなボタン（項目追加・リセット）の表示/非表示を切り替え ---
             document.getElementById('add-item-button-container').classList.toggle('hidden', !isEditable);
             document.getElementById('reset-names-button-container').classList.toggle('hidden', !isEditable);
         }
 
-        // --- アプリケーションの初期化・実行 ---
-
-        /**
-         * [MODIFIED] アプリケーションの初期化（起動処理）
-         */
+        // --- 初期化 ---
         function initialize() {
             loadAllData();
             currentMonth = getCurrentMonthKey();
             renderMonthSelector();
             loadMonthData(currentMonth);
             renderCards();
-            updateEditButtonVisibility(); // 編集ボタンの状態を初期化
+            updateEditButtonVisibility();
+            
+            if (isInitialized) {
+                setupFirebaseListener();
+            }
         }
-        
-        /**
-         * グローバルクリックイベント
-         * メニュー以外の場所をクリックしたときに、開いているメニューをすべて閉じる
-         */
+
         window.onclick = function(event) {
             if (!event.target.closest('button') || !event.target.closest('button').onclick.toString().includes('toggleMenu')) {
                 const openMenus = document.querySelectorAll('div[id^="menu-"]:not(.hidden)');
@@ -499,9 +505,8 @@
                 });
             }
         }
-        
-        // --- 実行 ---
-        initialize(); // アプリケーションを実行
+
+        initialize();
     </script>
 </body>
 </html>
