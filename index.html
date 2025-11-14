@@ -71,6 +71,13 @@
                     </div>
                 </div>
             </div>
+        <!--
+            <div class="text-center" id="reset-names-button-container">
+                <button onclick="resetNames()" class="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-8 rounded-lg shadow-lg transition transform hover:scale-105">
+                    名簿をリセット
+                </button>
+            </div>
+        -->
         </div>
     </div>
 
@@ -342,6 +349,16 @@
                 item.names = value;
                 saveData();
                 updateStats();
+            }
+        }
+
+        // --- リセット ---
+        function resetNames() {
+            if (confirm('名簿と合計金額をリセットしますか？（項目名と金額設定は保持されます）\n\n※全員のデータがリセットされます')) {
+                items = items.map(item => ({ ...item, names: '' }));
+                allData[currentMonth] = items;
+                saveData();
+                renderCards();
             }
         }
 
