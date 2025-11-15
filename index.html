@@ -27,15 +27,42 @@
             background-color: #f4f5f7;
             cursor: not-allowed;
         }
+        
+        /* ローディングアニメーション */
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .spinner {
+            border: 4px solid #e5e7eb;
+            border-top: 4px solid #4f46e5;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            animation: spin 1s linear infinite;
+        }
+        
+        /* ローディング画面のフェードアウト */
+        .fade-out {
+            opacity: 0;
+            transition: opacity 0.5s ease-out;
+        }
     </style>
 </head>
 <body class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-    <div id="app" class="p-8">
+    <!-- ローディング画面 -->
+    <div id="loading-screen" class="fixed inset-0 bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center z-50">
+        <div class="text-center">
+            <div class="spinner mx-auto mb-6"></div>
+            <h2 class="text-2xl font-bold text-indigo-900 mb-2">サーバーと同期中</h2>
+            <p class="text-gray-600">データを読み込んでいます...</p>
+        </div>
+    </div>
+
+    <!-- メインコンテンツ -->
+    <div id="app" class="p-8" style="display: none;">
         <div class="max-w-6xl mx-auto">
-            <div class="flex items-center justify-center gap-3 mb-2">
-                <h1 class="text-4xl font-bold text-center text-indigo-900">部費管理</h1>
-                <div id="sync-indicator" class="w-3 h-3 rounded-full bg-gray-400" title="接続中..."></div>
-            </div>
+            <h1 class="text-4xl font-bold text-center text-indigo-900 mb-2">部費管理</h1>
             <p class="text-center text-sm text-gray-600 mb-4">※このサイトのデータは全員で共有されます</p>
 
             <div class="mb-4 max-w-xs mx-auto">
@@ -71,13 +98,6 @@
                     </div>
                 </div>
             </div>
-        <!--
-            <div class="text-center" id="reset-names-button-container">
-                <button onclick="resetNames()" class="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-8 rounded-lg shadow-lg transition transform hover:scale-105">
-                    名簿をリセット
-                </button>
-            </div>
-        -->
         </div>
     </div>
 
@@ -104,7 +124,8 @@
             isInitialized = true;
         } catch (error) {
             console.error('Firebase initialization failed:', error);
-            alert('Firebase設定が必要です。設定方法はコメントを参照してください。');
+            hideLoadingScreen();
+            alert('Firebase接続に失敗しました。ローカルモードで起動します。');
         }
 
         // --- グローバル変数 ---
@@ -114,42 +135,47 @@
         let isEditingPast = false;
         let isUpdating = false;
         let saveTimeout = null;
+        let initialLoadComplete = false;
 
-        // --- 同期インジケーター ---
-        function showSyncIndicator(status) {
-            const indicator = document.getElementById('sync-indicator');
-            if (status === 'syncing') {
-                indicator.className = 'w-3 h-3 rounded-full bg-yellow-500 animate-pulse';
-                indicator.title = '同期中...';
-            } else if (status === 'connected') {
-                indicator.className = 'w-3 h-3 rounded-full bg-green-500';
-                indicator.title = '同期完了';
-            } else if (status === 'error') {
-                indicator.className = 'w-3 h-3 rounded-full bg-red-500';
-                indicator.title = '接続エラー';
-            } else {
-                indicator.className = 'w-3 h-3 rounded-full bg-gray-400';
-                indicator.title = '接続中...';
-            }
+        // --- ローディング画面の制御 ---
+        function hideLoadingScreen() {
+            const loadingScreen = document.getElementById('loading-screen');
+            const app = document.getElementById('app');
+            
+            loadingScreen.classList.add('fade-out');
+            
+            setTimeout(() => {
+                loadingScreen.style.display = 'none';
+                app.style.display = 'block';
+            }, 500);
         }
 
         // --- Firebase関連 ---
         function setupFirebaseListener() {
-            if (!isInitialized) return;
+            if (!isInitialized) {
+                hideLoadingScreen();
+                return;
+            }
 
             dataRef.on('value', (snapshot) => {
-                if (isUpdating) return;
-                
                 const data = snapshot.val();
                 if (data) {
                     allData = data;
+                }
+                
+                if (!initialLoadComplete) {
+                    initialLoadComplete = true;
+                    loadMonthData(currentMonth);
+                    renderCards();
+                    hideLoadingScreen();
+                } else if (!isUpdating) {
                     loadMonthData(currentMonth);
                     renderCards();
                 }
-                showSyncIndicator('connected');
             }, (error) => {
                 console.error('Firebase read error:', error);
-                showSyncIndicator('error');
+                hideLoadingScreen();
+                alert('データの読み込みに失敗しました。ローカルデータで起動します。');
             });
         }
 
@@ -160,7 +186,6 @@
             }
 
             try {
-                showSyncIndicator('syncing');
                 isUpdating = true;
                 
                 await dataRef.set(allData);
@@ -168,11 +193,9 @@
                 
                 setTimeout(() => {
                     isUpdating = false;
-                    showSyncIndicator('connected');
                 }, 300);
             } catch (error) {
                 console.error('Failed to save data:', error);
-                showSyncIndicator('error');
                 isUpdating = false;
                 localStorage.setItem('club-fee-data-monthly', JSON.stringify(allData));
             }
@@ -352,18 +375,6 @@
             }
         }
 
-        // --- リセット ---
-        /*
-        function resetNames() {
-            if (confirm('名簿と合計金額をリセットしますか？（項目名と金額設定は保持されます）\n\n※全員のデータがリセットされます')) {
-                items = items.map(item => ({ ...item, names: '' }));
-                allData[currentMonth] = items;
-                saveData();
-                renderCards();
-            }
-        }
-        */
-
         // --- 計算・描画 ---
         function calculateStats() {
             let totalAmount = 0;
@@ -483,8 +494,6 @@
             updateStats();
             
             document.getElementById('add-item-button-container').classList.toggle('hidden', !isEditable);
-            //リセットボタンの処理
-            //document.getElementById('reset-names-button-container').classList.toggle('hidden', !isEditable);
         }
 
         // --- 初期化 ---
@@ -492,13 +501,16 @@
             loadAllData();
             currentMonth = getCurrentMonthKey();
             renderMonthSelector();
-            loadMonthData(currentMonth);
-            renderCards();
-            updateEditButtonVisibility();
             
             if (isInitialized) {
                 setupFirebaseListener();
+            } else {
+                loadMonthData(currentMonth);
+                renderCards();
+                hideLoadingScreen();
             }
+            
+            updateEditButtonVisibility();
         }
 
         window.onclick = function(event) {
