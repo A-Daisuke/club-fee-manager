@@ -6,15 +6,16 @@
     <title>部費管理 (月別)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
     
     <style>
+        /* Webフォント(Noto Sans JP)を読み込み */
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap');
         body {
             font-family: 'Noto Sans JP', sans-serif;
         }
+        /* 数字入力欄の上下矢印（スピンボタン）を非表示にする */
         input[type="number"]::-webkit-outer-spin-button,
         input[type="number"]::-webkit-inner-spin-button {
             -webkit-appearance: none;
@@ -23,16 +24,18 @@
         input[type="number"] {
             -moz-appearance: textfield;
         }
+        /* 編集不可（disabled）状態の入力欄のスタイル */
         input:disabled, textarea:disabled {
             background-color: #f4f5f7;
             cursor: not-allowed;
         }
         
-        /* ローディングアニメーション */
+        /* ローディングアニメーション（@keyframes spin）の定義 */
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        /* .spinnerクラス（回転アニメーション）のスタイル */
         .spinner {
             border: 4px solid #e5e7eb;
             border-top: 4px solid #4f46e5;
@@ -42,7 +45,7 @@
             animation: spin 1s linear infinite;
         }
         
-        /* ローディング画面のフェードアウト */
+        /* ローディング画面が消える時のフェードアウトアニメーション */
         .fade-out {
             opacity: 0;
             transition: opacity 0.5s ease-out;
@@ -50,7 +53,7 @@
     </style>
 </head>
 <body class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-    <!-- ローディング画面 -->
+
     <div id="loading-screen" class="fixed inset-0 bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center z-50">
         <div class="text-center">
             <div class="spinner mx-auto mb-6"></div>
@@ -59,7 +62,6 @@
         </div>
     </div>
 
-    <!-- メインコンテンツ -->
     <div id="app" class="p-8" style="display: none;">
         <div class="max-w-6xl mx-auto">
             <h1 class="text-4xl font-bold text-center text-indigo-900 mb-2">部費管理</h1>
@@ -68,7 +70,7 @@
             <div class="mb-4 max-w-xs mx-auto">
                 <label for="month-selector" class="block text-sm font-medium text-gray-700 text-center mb-2">表示する月</label>
                 <select id="month-selector" onchange="changeMonth(this.value)" class="w-full px-4 py-3 border-2 border-indigo-300 rounded-lg shadow-sm focus:outline-none focus:border-indigo-500 text-lg font-bold text-indigo-900">
-                </select>
+                    </select>
             </div>
             
             <div class="text-center mb-8">
@@ -77,7 +79,8 @@
                 </button>
             </div>
             
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8" id="items-container"></div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8" id="items-container">
+                </div>
 
             <div class="text-center mb-8" id="add-item-button-container">
                 <button onclick="addItem()" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3 px-8 rounded-lg shadow-lg transition transform hover:scale-105">
@@ -85,23 +88,45 @@
                 </button>
             </div>
 
+            <div class="bg-white rounded-lg shadow-lg p-6 mb-8" id="expenses-container">
+                <h2 class="font-bold text-xl text-red-700 mb-4">支出</h2>
+                <div id="expenses-list" class="space-y-3 mb-4">
+                    </div>
+                <div class="text-center" id="add-expense-button-container">
+                    <button onclick="addExpense()" class="w-12 h-12 bg-red-500 hover:bg-red-600 text-white font-bold rounded-full shadow-lg transition transform hover:scale-110 flex items-center justify-center mx-auto">
+                        <span class="text-2xl">+</span>
+                    </button>
+                </div>
+            </div>
+
             <div class="bg-white rounded-lg shadow-lg p-8 mb-6">
                 <h2 class="text-2xl font-bold text-indigo-900 mb-4">合計</h2>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                        <div id="stats-list"></div>
+                
+                <div id="stats-list" class="mb-4">
                     </div>
-                    <div class="flex flex-col justify-center items-center bg-indigo-50 rounded-lg p-6">
-                        <p class="text-gray-600 mb-2">総合計金額</p>
-                        <p class="text-5xl font-bold text-indigo-900" id="total-amount">0</p>
-                        <p class="text-gray-600 mt-1">円</p>
+                
+                <div class="border-t-2 border-gray-200 pt-4 mb-6">
+                    <div class="flex justify-between items-center py-2">
+                        <span class="text-lg font-semibold text-indigo-700">総収入:</span>
+                        <span class="text-lg font-bold text-indigo-700" id="total-income">0円</span>
                     </div>
+                    <div class="flex justify-between items-center py-2">
+                        <span class="text-lg font-semibold text-red-600">総支出:</span>
+                        <span class="text-lg font-bold text-red-600" id="total-expenses">0円</span>
+                    </div>
+                </div>
+                
+                <div class="flex flex-col justify-center items-center bg-green-50 rounded-lg p-6 border-2 border-green-200" id="balance-container">
+                    <p class="text-gray-600 mb-2">差額</p>
+                    <p class="text-5xl font-bold text-green-700" id="balance-amount">0</p>
+                    <p class="text-gray-600 mt-1">円</p>
                 </div>
             </div>
         </div>
     </div>
-
     <script>
+        // --- Firebase 接続情報 ---
+        // ※この情報は公開されても問題ない設定になっています
         const firebaseConfig = {
             apiKey: "AIzaSyDyTS3N8CBac4E9iMOVL6YBOWNK8M02p6U",
             authDomain: "club-fee-manager.firebaseapp.com",
@@ -112,152 +137,214 @@
             appId: "1:122953605460:web:0f7c8153367720276da8c1"
         };
 
-        // Initialize Firebase
-        let database;
-        let dataRef;
-        let isInitialized = false;
+        // --- Firebase の初期化処理 ---
+        let database; // データベースへの参照を保持
+        let dataRef;  // データの保存場所 ('clubFeeDataMonthly') への参照
+        let isInitialized = false; // Firebase接続成功フラグ
 
         try {
+            // Firebaseアプリを初期化
             firebase.initializeApp(firebaseConfig);
+            // Realtime Database サービスを取得
             database = firebase.database();
+            // 'clubFeeDataMonthly' という名前の最上位ノード（データ保存場所）を参照
             dataRef = database.ref('clubFeeDataMonthly');
-            isInitialized = true;
+            isInitialized = true; // 接続成功
         } catch (error) {
+            // 接続に失敗した場合
             console.error('Firebase initialization failed:', error);
-            hideLoadingScreen();
+            hideLoadingScreen(); // ローディング画面を隠す
             alert('Firebase接続に失敗しました。ローカルモードで起動します。');
         }
 
         // --- グローバル変数 ---
-        let allData = {};
-        let items = [];
-        let currentMonth = '';
-        let isEditingPast = false;
-        let isUpdating = false;
-        let saveTimeout = null;
-        let initialLoadComplete = false;
+        // アプリ全体で使う情報を保存する変数
+        let allData = {}; // Firebaseから取得したすべての月のデータ（ローカルコピー）
+        let items = [];     // 現在表示中の月の「収入」データ
+        let expenses = [];  // 現在表示中の月の「支出」データ
+        let currentMonth = ''; // 現在表示中の月 (例: "2025-11")
+        let isEditingPast = false; // 「過去の記録を編集」モードがONかどうか
+        let isUpdating = false;    // 自分がデータをFirebaseに送信中かどうかのフラグ
+        let saveTimeout = null;    // 自動保存の間隔を調整するためのタイマー
+        let initialLoadComplete = false; // 最初のデータ読み込みが完了したか
 
         // --- ローディング画面の制御 ---
+        /**
+         * ローディング画面をフェードアウトさせて非表示にし、
+         * メインのアプリ画面を表示する。
+         */
         function hideLoadingScreen() {
             const loadingScreen = document.getElementById('loading-screen');
             const app = document.getElementById('app');
             
             loadingScreen.classList.add('fade-out');
             
+            // 0.5秒のアニメーション後に非表示(display: none)にする
             setTimeout(() => {
                 loadingScreen.style.display = 'none';
                 app.style.display = 'block';
             }, 500);
         }
 
-        // --- Firebase関連 ---
+        // --- Firebase関連 (データの送受信) ---
+        /**
+         * Firebaseデータベースの変更を監視（リッスン）する設定。
+         * 他の人がデータを変更すると、この関数が自動で呼び出される。
+         */
         function setupFirebaseListener() {
             if (!isInitialized) {
                 hideLoadingScreen();
                 return;
             }
 
+            // データベースの 'clubFeeDataMonthly' の場所で変更があった時に実行
             dataRef.on('value', (snapshot) => {
-                const data = snapshot.val();
+                const data = snapshot.val(); // データベースの全データを取得
                 if (data) {
-                    allData = data;
+                    allData = data; // 取得したデータでローカルの 'allData' を更新
                 }
                 
                 if (!initialLoadComplete) {
+                    // --- 1. アプリの初回起動時 ---
                     initialLoadComplete = true;
-                    loadMonthData(currentMonth);
-                    renderCards();
-                    hideLoadingScreen();
+                    loadMonthData(currentMonth); // 今月のデータを準備
+                    renderCards();     // 収入カードを描画
+                    renderExpenses();  // 支出リストを描画
+                    hideLoadingScreen(); // ローディングを隠す
                 } else if (!isUpdating) {
-                    loadMonthData(currentMonth);
-                    renderCards();
+                    // --- 2. 他のユーザーがデータを更新した時 ---
+                    // (自分が更新中の場合は、無限ループを防ぐため実行しない)
+                    loadMonthData(currentMonth); // 最新データで今月データを再読み込み
+                    renderCards();     // 画面を再描画
+                    renderExpenses();  // 画面を再描画
                 }
             }, (error) => {
+                // データの読み込みに失敗した場合
                 console.error('Firebase read error:', error);
                 hideLoadingScreen();
                 alert('データの読み込みに失敗しました。ローカルデータで起動します。');
             });
         }
 
+        /**
+         * 現在の 'allData' 変数の内容すべてをFirebaseデータベースに上書き保存する。
+         * 同時に、ブラウザのローカルストレージにもバックアップ保存する。
+         */
         async function saveAllData() {
             if (!isInitialized) {
+                // Firebaseに接続失敗時はローカルストレージのみに保存
                 localStorage.setItem('club-fee-data-monthly', JSON.stringify(allData));
                 return;
             }
 
             try {
+                // 自分が更新中であることを示すフラグを立てる
+                // (これにより、自分の変更を自分で受信して画面がチラつくのを防ぐ)
                 isUpdating = true;
                 
-                await dataRef.set(allData);
-                localStorage.setItem('club-fee-data-monthly', JSON.stringify(allData));
+                await dataRef.set(allData); // Firebaseにデータを送信
+                localStorage.setItem('club-fee-data-monthly', JSON.stringify(allData)); // ローカルにもバックアップ
                 
+                // 0.3秒後に「更新中」フラグを下ろす
                 setTimeout(() => {
                     isUpdating = false;
                 }, 300);
             } catch (error) {
                 console.error('Failed to save data:', error);
-                isUpdating = false;
+                isUpdating = false; // エラー時もフラグを下ろす
                 localStorage.setItem('club-fee-data-monthly', JSON.stringify(allData));
             }
         }
 
+        /**
+         * データをすぐに保存せず、1秒待ってから保存する関数。
+         * ユーザーが連続で入力している最中に、何度も保存が走るのを防ぐ（デバウンス処理）。
+         */
         function saveData() {
-            allData[currentMonth] = items;
+            // 現在の収入(items)と支出(expenses)を 'allData' に反映
+            allData[currentMonth] = {
+                items: items,
+                expenses: expenses
+            };
             
+            // すでに保存タイマーが動いていれば、一度リセット
             clearTimeout(saveTimeout);
+            // 1秒後に `saveAllData` を実行するタイマーをセット
             saveTimeout = setTimeout(() => {
                 saveAllData();
-            }, 1000);
+            }, 1000); // 1000ミリ秒 = 1秒
         }
 
         // --- 月管理関数 ---
+        /**
+         * 現在の日付から、今月のキー文字列（例: "2025-11"）を生成する。
+         */
         function getCurrentMonthKey() {
             const now = new Date();
             const year = now.getFullYear();
-            const month = (now.getMonth() + 1).toString().padStart(2, '0');
+            const month = (now.getMonth() + 1).toString().padStart(2, '0'); // 月は0から始まるため+1
             return `${year}-${month}`;
         }
 
+        /**
+         * 月セレクター（ドロップダウン）のHTMLを生成する。
+         * 'allData' に存在するすべての月に加え、「今月」も選択肢に追加する。
+         */
         function renderMonthSelector() {
             const selector = document.getElementById('month-selector');
             selector.innerHTML = '';
+            // 存在する月のキーを降順（新しい順）にソート
             const existingKeys = Object.keys(allData).sort().reverse();
             const thisMonthKey = getCurrentMonthKey();
+            // もし今月がデータになければ、選択肢の先頭に追加
             if (!existingKeys.includes(thisMonthKey)) {
                 existingKeys.unshift(thisMonthKey);
             }
+            // 各月を <option> タグとして追加
             existingKeys.forEach(monthKey => {
                 const option = document.createElement('option');
                 option.value = monthKey;
                 option.textContent = monthKey;
                 if (monthKey === currentMonth) {
-                    option.selected = true;
+                    option.selected = true; // 現在表示中の月を選択状態にする
                 }
                 selector.appendChild(option);
             });
         }
 
+        /**
+         * 月セレクターで違う月が選択された時に呼び出される。
+         * @param {string} monthKey 選択された月 (例: "2025-10")
+         */
         function changeMonth(monthKey) {
-            isEditingPast = false;
-            loadMonthData(monthKey);
-            renderCards();
-            updateEditButtonVisibility();
+            isEditingPast = false; // 編集モードをリセット
+            loadMonthData(monthKey); // 選択された月のデータを読み込む
+            renderCards();     // 収入カードを再描画
+            renderExpenses();  // 支出リストを再描画
+            updateEditButtonVisibility(); // 「過去の～」ボタンの表示/非表示を更新
         }
 
+        /**
+         * 「過去の記録を編集」ボタンの表示/非表示とテキストを制御する。
+         */
         function updateEditButtonVisibility() {
             const editButton = document.getElementById('edit-mode-button');
             const isThisMonth = (currentMonth === getCurrentMonthKey());
 
             if (isThisMonth) {
+                // 今月を表示している時は、ボタンを隠す
                 editButton.classList.add('hidden');
             } else {
+                // 過去の月を表示している時は、ボタンを表示
                 editButton.classList.remove('hidden');
                 
                 if (isEditingPast) {
+                    // 「編集モード」ON の場合
                     editButton.textContent = '編集を完了';
                     editButton.classList.remove('bg-yellow-500', 'hover:bg-yellow-600');
                     editButton.classList.add('bg-green-500', 'hover:bg-green-600');
                 } else {
+                    // 「編集モード」OFF (ロック中) の場合
                     editButton.textContent = '過去の記録を編集';
                     editButton.classList.add('bg-yellow-500', 'hover:bg-yellow-600');
                     editButton.classList.remove('bg-green-500', 'hover:bg-green-600');
@@ -265,13 +352,21 @@
             }
         }
 
+        /**
+         * 「過去の記録を編集」ボタンが押された時に呼び出される。
+         * 編集モード（isEditingPast）のON/OFFを切り替え、画面を再描画する。
+         */
         function toggleEditMode() {
-            isEditingPast = !isEditingPast;
-            renderCards();
-            updateEditButtonVisibility();
+            isEditingPast = !isEditingPast; // true/false を反転
+            renderCards();    // 収入カードを再描画（入力欄のロック/解除）
+            renderExpenses(); // 支出リストを再描画（入力欄のロック/解除）
+            updateEditButtonVisibility(); // ボタンの表示を更新
         }
 
         // --- データ管理 ---
+        /**
+         * アプリ起動時に、ブラウザのローカルストレージからバックアップデータを読み込む。
+         */
         function loadAllData() {
             const saved = localStorage.getItem('club-fee-data-monthly');
             if (saved) {
@@ -279,72 +374,248 @@
             }
         }
 
+        /**
+         * 'allData' から指定された月のデータを抽出し、
+         * 'items' と 'expenses' 変数にセットする。
+         * @param {string} monthKey 読み込む月 (例: "2025-11")
+         */
         function loadMonthData(monthKey) {
-            currentMonth = monthKey;
+            currentMonth = monthKey; // 現在の月を更新
 
             if (allData[monthKey]) {
-                items = allData[monthKey];
+                // --- 1. 指定された月のデータが既にある場合 ---
+                if (allData[monthKey].items) {
+                    // 新しいデータ形式 (items と expenses がある)
+                    items = allData[monthKey].items;
+                    expenses = allData[monthKey].expenses || []; // 支出データがない場合は空配列
+                } else {
+                    // 古いデータ形式（収入(items)の配列のみ）
+                    items = allData[monthKey];
+                    expenses = []; // 支出は空にする
+                }
             } else {
+                // --- 2. 指定された月が「新規」の場合 ---
+                // (例: 11月に初めて12月を表示しようとした時)
+                
+                // 存在する月キーをソートし、最新の月（＝前月）を探す
                 const keys = Object.keys(allData).sort().reverse();
                 const lastMonthKey = keys[0];
 
                 if (lastMonthKey) {
-                    let lastMonthItems = JSON.parse(JSON.stringify(allData[lastMonthKey]));
-                    let newItems = lastMonthItems.map(item => ({ ...item, names: '' }));
-                    allData[monthKey] = newItems;
+                    // --- 2a. 前月のデータがある場合 ---
+                    // 前月のデータをコピーして「名前」欄だけ空にする
+                    let lastMonthData = allData[lastMonthKey];
+                    
+                    if (lastMonthData.items) {
+                        // 新形式
+                        let lastMonthItems = JSON.parse(JSON.stringify(lastMonthData.items));
+                        let newItems = lastMonthItems.map(item => ({ ...item, names: '' })); // 名前欄だけリセット
+                        items = newItems;
+                        expenses = []; // 支出は引き継がない
+                    } else {
+                        // 古形式
+                        let lastMonthItems = JSON.parse(JSON.stringify(lastMonthData));
+                        let newItems = lastMonthItems.map(item => ({ ...item, names: '' }));
+                        items = newItems;
+                        expenses = [];
+                    }
+                    
+                    // 新しい月のデータとして 'allData' に保存
+                    allData[monthKey] = {
+                        items: items,
+                        expenses: expenses
+                    };
                 } else {
-                    allData[monthKey] = [
-                        { id: Date.now(), label: '項目 1', price: '500', names: '' },
-                        { id: Date.now()-1, label: '項目 2', price: '800', names: '' },
-                        { id: Date.now()-2, label: '項目 3', price: '1000', names: '' }
-                    ];
+                    // --- 2b. アプリの初回起動で何のデータもない場合 ---
+                    // デフォルトのサンプルデータを作成
+                    allData[monthKey] = {
+                        items: [
+                            { id: Date.now(), label: '項目 1', price: '500', names: '' },
+                            { id: Date.now()-1, label: '項目 2', price: '800', names: '' },
+                            { id: Date.now()-2, label: '項目 3', price: '1000', names: '' }
+                        ],
+                        expenses: []
+                    };
+                    items = allData[monthKey].items;
+                    expenses = allData[monthKey].expenses;
                 }
-                
-                items = allData[monthKey];
             }
         }
 
         // --- ユーティリティ ---
+        /**
+         * 複数行の「名前」テキストエリアから、空行を除いた名前の「人数」を数える。
+         * @param {string} names テキストエリアの文字列
+         * @returns {Array} 名前の配列
+         */
         function getNameList(names) {
-            return names.split('\n').filter(name => name.trim() !== '');
+            return names.split('\n').filter(name => name.trim() !== ''); // 改行で分割し、空行を削除
         }
 
-        // --- カード操作 ---
+        // --- 支出管理 ---
+        /**
+         * 支出の「+」ボタンが押された時に呼び出される。
+         * 新しい空の支出データを 'expenses' 配列に追加し、保存・再描画する。
+         */
+        function addExpense() {
+            const newExpense = {
+                id: Date.now(), // 現在時刻をユニークIDとして使用
+                title: '',
+                amount: ''
+            };
+            expenses.push(newExpense);
+            saveData();       // データをFirebaseに保存（1秒後）
+            renderExpenses(); // 支出リストを再描画
+        }
+
+        /**
+         * 支出の「項目名」が入力された時に呼び出される。
+         * @param {number} expenseId 変更された支出のID
+         * @param {string} value 新しい項目名
+         */
+        function updateExpenseTitle(expenseId, value) {
+            const expense = expenses.find(e => e.id === expenseId);
+            if (expense) {
+                expense.title = value; // データを更新
+                saveData();    // 保存
+                updateStats(); // 合計金額を再計算
+            }
+        }
+
+        /**
+         * 支出の「金額」が入力された時に呼び出される。
+         * @param {number} expenseId 変更された支出のID
+         * @param {string} value 新しい金額
+         */
+        function updateExpenseAmount(expenseId, value) {
+            const expense = expenses.find(e => e.id === expenseId);
+            if (expense) {
+                expense.amount = value; // データを更新
+                saveData();     // 保存
+                updateStats();  // 合計金額を再計算
+            }
+        }
+
+        /**
+         * 支出の「×」ボタンが押された時に呼び出される。
+         * @param {number} expenseId 削除する支出のID
+         */
+        function deleteExpense(expenseId) {
+            if (confirm('この支出を削除してもよろしいですか？')) {
+                // IDが一致しないものだけを残す（＝一致したものを削除）
+                expenses = expenses.filter(e => e.id !== expenseId);
+                saveData();       // 保存
+                renderExpenses(); // 支出リストを再描画
+                updateStats();    // 合計金額を再計算
+            }
+        }
+
+        /**
+         * 'expenses' 配列のデータから、支出リストのHTMLを生成して画面に表示する。
+         * 編集モード（isEditable）に応じて、入力欄のロック/解除も行う。
+         */
+        function renderExpenses() {
+            const expensesList = document.getElementById('expenses-list');
+            // 今月か、過去の編集モードがONの時
+            const isEditable = (currentMonth === getCurrentMonthKey() || isEditingPast);
+            
+            if (expenses.length === 0) {
+                // 支出が0件の場合
+                expensesList.innerHTML = '<p class="text-center text-gray-500 py-4">支出項目がありません</p>';
+            } else {
+                // 支出データを行ごとにHTMLに変換
+                expensesList.innerHTML = expenses.map(expense => `
+                    <div class="flex items-center gap-2 bg-white p-1 rounded-lg">
+                        <input
+                            type="text"
+                            value="${expense.title}"
+                            oninput="updateExpenseTitle(${expense.id}, this.value)"
+                            placeholder="項目名"
+                            class="flex-1 px-3 py-2 text-sm border-2 border-red-200 rounded-lg focus:outline-none focus:border-red-400"
+                            ${!isEditable ? 'disabled' : ''} />
+                        <input
+                            type="number"
+                            value="${expense.amount}"
+                            oninput="updateExpenseAmount(${expense.id}, this.value)"
+                            placeholder="金額"
+                            class="w-28 px-3 py-2 text-sm border-2 border-red-200 rounded-lg focus:outline-none focus:border-red-400"
+                            ${!isEditable ? 'disabled' : ''} />
+                        <span class="text-gray-700 text-sm font-medium">円</span>
+                        ${isEditable ? `
+                            <button
+                                onclick="deleteExpense(${expense.id})"
+                                class="text-red-500 hover:text-red-700 transition p-2"
+                            >
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                                </svg>
+                            </button>
+                        ` : ''}
+                    </div>
+                `).join('');
+            }
+            
+            // 支出の「+」ボタンのコンテナを取得
+            const addButtonContainer = document.getElementById('add-expense-button-container');
+            if (addButtonContainer) {
+                // 編集不可なら「+」ボタンのコンテナごと非表示にする
+                addButtonContainer.style.display = isEditable ? 'block' : 'none';
+            }
+        }
+
+        // --- 収入カード操作 ---
+        /**
+         * 収入カードの「項目名を変更」が押された時に呼び出される。
+         * @param {number} itemId 変更する収入項目のID
+         */
         function renameItem(itemId) {
             const item = items.find(i => i.id === itemId);
             if (!item) return;
-            toggleMenu(itemId, true);
+            toggleMenu(itemId, true); // メニューを強制的に閉じる
             const newLabel = prompt('新しい項目名を入力してください:', item.label);
             if (newLabel && newLabel.trim() !== '') {
-                item.label = newLabel.trim();
-                saveData();
-                renderCards();
+                item.label = newLabel.trim(); // データを更新
+                saveData();    // 保存
+                renderCards(); // 画面を再描画
             }
         }
 
+        /**
+         * 収入カードの「項目を削除」が押された時に呼び出される。
+         * @param {number} itemId 削除する収入項目のID
+         */
         function deleteItem(itemId) {
-            toggleMenu(itemId, true);
+            toggleMenu(itemId, true); // メニューを強制的に閉じる
             if (confirm('この項目を削除してもよろしいですか？（名簿も削除されます）')) {
-                items = items.filter(item => item.id !== itemId);
-                allData[currentMonth] = items;
-                saveData();
-                renderCards();
+                items = items.filter(item => item.id !== itemId); // データを削除
+                saveData();    // 保存
+                renderCards(); // 画面を再描画
             }
         }
 
+        /**
+         * 「項目を追加」（収入用）ボタンが押された時に呼び出される。
+         * 新しい空の収入カードデータを 'items' 配列に追加し、保存・再描画する。
+         */
         function addItem() {
             const newId = Date.now();
             const newItem = {
                 id: newId,
-                label: `項目 ${items.length + 1}`,
+                label: `項目 ${items.length + 1}`, // デフォルトの項目名
                 price: '',
                 names: ''
             };
             items.push(newItem);
-            saveData();
-            renderCards();
+            saveData();    // 保存
+            renderCards(); // 画面を再描画
         }
 
+        /**
+         * 収入カード右上の「...」メニューの表示/非表示を切り替える。
+         * @param {number} itemId 対象カードのID
+         * @param {boolean} forceClose [オプション] trueなら強制的に閉じる
+         */
         function toggleMenu(itemId, forceClose = false) {
             const menu = document.getElementById(`menu-${itemId}`);
             if (menu) {
@@ -356,43 +627,71 @@
             }
         }
 
-        // --- リアルタイム更新 ---
+        // --- リアルタイム更新 (収入) ---
+        /**
+         * 収入カードの「金額」が入力された時に呼び出される。
+         * @param {number} itemId 変更された収入項目のID
+         * @param {string} value 新しい金額
+         */
         function updatePrice(itemId, value) {
             const item = items.find(i => i.id === itemId);
             if (item) {
-                item.price = value;
-                saveData();
-                updateStats();
+                item.price = value; // データを更新
+                saveData();    // 保存
+                updateStats(); // 合計金額を再計算
             }
         }
 
+        /**
+         * 収入カードの「名前」が入力された時に呼び出される。
+         * @param {number} itemId 変更された収入項目のID
+         * @param {string} value 新しい名前リストの文字列
+         */
         function updateNames(itemId, value) {
             const item = items.find(i => i.id === itemId);
             if (item) {
-                item.names = value;
-                saveData();
-                updateStats();
+                item.names = value; // データを更新
+                saveData();    // 保存
+                updateStats(); // 人数と合計金額を再計算
             }
         }
 
-        // --- 計算・描画 ---
+        // --- 計算・描画 (メインロジック) ---
+        /**
+         * 'items' と 'expenses' のデータから、すべての合計金額を計算する。
+         * @returns {object} 計算結果 (stats, totalAmount, totalExpenses)
+         */
         function calculateStats() {
-            let totalAmount = 0;
+            let totalAmount = 0; // 総収入
             const currentItems = items || [];
+            
+            // 収入の小計を計算
             const stats = currentItems.map(item => {
                 const price = parseFloat(item.price) || 0;
-                const count = getNameList(item.names).length;
-                const subtotal = price * count;
-                totalAmount += subtotal;
+                const count = getNameList(item.names).length; // 人数をカウント
+                const subtotal = price * count; // 金額 × 人数
+                totalAmount += subtotal; // 総収入に加算
                 return { price, count, subtotal };
             });
-            return { stats, totalAmount };
+            
+            // 支出の合計を計算
+            let totalExpenses = 0; // 総支出
+            expenses.forEach(expense => {
+                totalExpenses += parseFloat(expense.amount) || 0;
+            });
+            
+            return { stats, totalAmount, totalExpenses };
         }
 
+        /**
+         * `calculateStats` の計算結果を画面の「合計」セクションと
+         * 各収入カードの「小計」欄に反映する。
+         */
         function updateStats() {
-            const { stats, totalAmount } = calculateStats();
+            const { stats, totalAmount, totalExpenses } = calculateStats();
             const currentItems = items || [];
 
+            // 1. 各収入カードの「人数」と「小計」を更新
             currentItems.forEach((item, index) => {
                 const countEl = document.getElementById(`count-${item.id}`);
                 const subtotalEl = document.getElementById(`subtotal-${item.id}`);
@@ -404,6 +703,7 @@
                 }
             });
 
+            // 2. 「合計」セクションの収入内訳を更新
             const statsList = document.getElementById('stats-list');
             statsList.innerHTML = currentItems.map((item, index) => {
                 return `
@@ -414,22 +714,48 @@
                 `;
             }).join('');
 
-            document.getElementById('total-amount').textContent = totalAmount.toLocaleString();
+            // 3. 「総収入」「総支出」を更新
+            document.getElementById('total-income').textContent = `${totalAmount.toLocaleString()}円`;
+            document.getElementById('total-expenses').textContent = `-${totalExpenses.toLocaleString()}円`;
+            
+            // 4. 「差額」を更新
+            const balance = totalAmount - totalExpenses; // 差額を計算
+            document.getElementById('balance-amount').textContent = balance.toLocaleString();
+            
+            // 5. 差額に応じて「差額」欄のスタイル（色）を変更
+            const balanceEl = document.getElementById('balance-amount');
+            const balanceContainer = document.getElementById('balance-container');
+            if (balance < 0) {
+                // 赤字の場合
+                balanceEl.className = 'text-5xl font-bold text-red-700';
+                balanceContainer.className = 'flex flex-col justify-center items-center bg-red-50 rounded-lg p-6 border-2 border-red-200';
+            } else {
+                // 黒字の場合
+                balanceEl.className = 'text-5xl font-bold text-blue-700';
+                balanceContainer.className = 'flex flex-col justify-center items-center bg-blue-50 rounded-lg p-6 border-2 border-blue-200';
+            }
         }
 
+        /**
+         * 'items' 配列のデータから、収入カードのHTMLを生成して画面に表示する。
+         * 編集モード（isEditable）に応じて、入力欄のロック/解除も行う。
+         */
         function renderCards() {
             const itemsContainer = document.getElementById('items-container');
+            // 今月か、過去の編集モードがONの時
             const isEditable = (currentMonth === getCurrentMonthKey() || isEditingPast);
 
             if (!items || items.length === 0) {
+                // 収入項目が0件の場合
                 itemsContainer.innerHTML = `<div class="col-span-1 md:col-span-3 text-center text-gray-500 py-8">データがありません。「項目を追加」ボタンから最初の項目を作成してください。</div>`;
             } else {
+                // 収入データをカードごとにHTMLに変換
                 itemsContainer.innerHTML = items.map((item, index) => {
                     const nameList = getNameList(item.names);
                     
                     return `
                         <div class="bg-white rounded-lg shadow-lg p-6 relative">
-                        
+                            
                             <div class="absolute top-2 right-2 ${!isEditable ? 'hidden' : ''}">
                                 <button onclick="toggleMenu(${item.id})" class="text-gray-500 hover:text-indigo-700 p-2 rounded-full focus:outline-none">
                                     <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
@@ -462,8 +788,7 @@
                                         oninput="updatePrice(${item.id}, this.value)"
                                         placeholder="金額"
                                         class="w-full px-4 py-2 border-2 border-indigo-200 rounded-lg focus:outline-none focus:border-indigo-500"
-                                        ${!isEditable ? 'disabled' : ''}
-                                    />
+                                        ${!isEditable ? 'disabled' : ''} />
                                     <span class="text-gray-700 font-medium">円</span>
                                 </div>
                             </div>
@@ -478,8 +803,7 @@
                                     placeholder="山田太郎&#10;佐藤花子&#10;田中次郎"
                                     rows="8"
                                     class="w-full px-4 py-2 border-2 border-indigo-200 rounded-lg focus:outline-none focus:border-indigo-500 resize-none"
-                                    ${!isEditable ? 'disabled' : ''}
-                                >${item.names}</textarea>
+                                    ${!isEditable ? 'disabled' : ''} >${item.names}</textarea>
                             </div>
 
                             <div class="mt-4 pt-4 border-t-2 border-indigo-100">
@@ -491,38 +815,62 @@
                 }).join('');
             }
 
+            // カード描画の最後に、必ず合計欄も更新する
             updateStats();
             
+            // 「項目を追加」ボタンの表示/非表示を切り替え
             document.getElementById('add-item-button-container').classList.toggle('hidden', !isEditable);
         }
 
         // --- 初期化 ---
+        /**
+         * アプリ起動時に最初に実行される関数。
+         * すべての処理を開始する起点。
+         */
         function initialize() {
+            // 1. ローカルストレージから前回のデータを読み込む
             loadAllData();
+            // 2. 今月のキー（"2025-11"など）を取得
             currentMonth = getCurrentMonthKey();
+            // 3. 月セレクターの選択肢を生成
             renderMonthSelector();
             
             if (isInitialized) {
+                // 4a. Firebase接続が成功している場合
+                //    リアルタイム監視を開始 (データ読み込みと描画は setupFirebaseListener 内で行われる)
                 setupFirebaseListener();
             } else {
+                // 4b. Firebase接続が失敗している場合 (ローカルモード)
+                //    手動でデータ読み込みと画面描画を実行
                 loadMonthData(currentMonth);
                 renderCards();
-                hideLoadingScreen();
+                renderExpenses();
+                hideLoadingScreen(); // ローディングを隠す
             }
             
+            // 5. 「過去の～」ボタンの表示状態を更新
             updateEditButtonVisibility();
         }
 
+        /**
+         * 画面のどこかをクリックした時に実行される。
+         * 収入カードの「...」メニュー以外をクリックしたら、開いているメニューをすべて閉じる。
+         */
         window.onclick = function(event) {
+            // クリックした場所が「...」ボタンでなければ
             if (!event.target.closest('button') || !event.target.closest('button').onclick.toString().includes('toggleMenu')) {
+                // 現在開いているすべてのメニューを取得
                 const openMenus = document.querySelectorAll('div[id^="menu-"]:not(.hidden)');
+                // すべてのメニューに 'hidden' クラスを付けて閉じる
                 openMenus.forEach(menu => {
                     menu.classList.add('hidden');
                 });
             }
         }
 
+        // --- アプリ起動 ---
         initialize();
+
     </script>
-</body>
+    </body>
 </html>
