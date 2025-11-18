@@ -115,12 +115,6 @@
                         <span class="text-lg font-bold text-red-600" id="total-expenses">0円</span>
                     </div>
                 </div>
-                
-                <div class="flex flex-col justify-center items-center bg-green-50 rounded-lg p-6 border-2 border-green-200" id="balance-container">
-                    <p class="text-gray-600 mb-2">差額</p>
-                    <p class="text-5xl font-bold text-green-700" id="balance-amount">0</p>
-                    <p class="text-gray-600 mt-1">円</p>
-                </div>
             </div>
         </div>
     </div>
@@ -718,6 +712,7 @@
             document.getElementById('total-income').textContent = `${totalAmount.toLocaleString()}円`;
             document.getElementById('total-expenses').textContent = `-${totalExpenses.toLocaleString()}円`;
             
+            /*
             // 4. 「差額」を更新
             const balance = totalAmount - totalExpenses; // 差額を計算
             document.getElementById('balance-amount').textContent = balance.toLocaleString();
@@ -734,6 +729,8 @@
                 balanceEl.className = 'text-5xl font-bold text-blue-700';
                 balanceContainer.className = 'flex flex-col justify-center items-center bg-blue-50 rounded-lg p-6 border-2 border-blue-200';
             }
+            */
+
         }
 
         /**
