@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { getCurrentMonthKey } from './utils.js';
+import { getCurrentMonthKey, isValidMonthKey } from './utils.js';
 
 /**
  * localStorageからバックアップデータを読み込む。
@@ -32,7 +32,7 @@ export function loadMonthData(monthKey) {
     }
 
     // 新しい月：直前月の項目名・金額を引き継ぐことで毎月の初期設定を省力化する
-    const keys = Object.keys(state.allData).sort().reverse();
+    const keys = Object.keys(state.allData).filter(isValidMonthKey).sort().reverse();
     const lastMonthKey = keys[0];
 
     if (lastMonthKey) {
@@ -60,7 +60,7 @@ export function loadMonthData(monthKey) {
  * @returns {string[]} "YYYY-MM" 形式の配列（降順）
  */
 export function getAvailableMonths() {
-    const keys = Object.keys(state.allData).sort().reverse();
+    const keys = Object.keys(state.allData).filter(isValidMonthKey).sort().reverse();
     const thisMonth = getCurrentMonthKey();
     if (!keys.includes(thisMonth)) keys.unshift(thisMonth);
     return keys;

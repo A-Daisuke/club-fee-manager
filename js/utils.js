@@ -9,7 +9,18 @@ export function escapeHtml(str) {
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+/**
+ * "YYYY-MM" 形式の正しい月キーかどうかを判定する。
+ * DBは外部から直接書き換えられる可能性があるため、不正なキーは表示・処理対象から除外する。
+ * @param {string} key
+ * @returns {boolean}
+ */
+export function isValidMonthKey(key) {
+    return /^\d{4}-(0[1-9]|1[0-2])$/.test(key);
 }
 
 /**
